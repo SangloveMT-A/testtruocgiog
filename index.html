@@ -5,9 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Trò Chơi Con Mực - Đấu Trường Sinh Tử</title>
 
-    <!-- Cấu hình Firebase đặt ở đầu tệp để dễ dàng thay thế khi triển khai thực tế -->
+    <!-- ===================================================================== -->
+    <!-- KHU VỰC THAY THẾ MÃ FIREBASE ĐỂ KẾT NỐI DATABASE CHO BẠN BÈ CHƠI CÙNG -->
+    <!-- Bạn chỉ cần dán trực tiếp đối tượng firebaseConfig từ Firebase Console -->
+    <!-- vào bên dưới (thay thế các giá trị "YOUR_...") là sử dụng được ngay!  -->
+    <!-- ===================================================================== -->
     <script>
-        window.CUSTOM_FIREBASE_CONFIG = null; // Có thể dán object firebaseConfig riêng tại đây nếu dùng ngoài môi trường mặc định
+        window.CUSTOM_FIREBASE_CONFIG = {
+             apiKey: "AIzaSyBR0i0evDpOR3ASrfl1b4Hcvb-_ssd8_6Y",
+            authDomain: "memaybeo01.firebaseapp.com",
+            databaseURL: "https://memaybeo01-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "memaybeo01",
+            storageBucket: "memaybeo01.firebasestorage.app",
+            messagingSenderId: "811199279426",
+            appId: "1:811199279426:web:3f1d18003be246c09a18db",
+            measurementId: "G-416SFVTG4V"
+        };
     </script>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -363,6 +376,38 @@
                         </span>
                         <h2 class="text-xl sm:text-2xl font-black text-white mt-2">CHƠI CÙNG BẠN BÈ</h2>
                         <p id="friends-fb-status" class="text-xs text-zinc-400 mt-1">Đang kiểm tra kết nối máy chủ phòng...</p>
+                        <button type="button" onclick="toggleFirebaseConfigDrawer()"
+                                class="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-amber-400/50 text-amber-300 text-xs font-bold transition">
+                            <span>⚙️</span>
+                            <span>Cài đặt / Dán mã Firebase nhanh</span>
+                        </button>
+                    </div>
+
+                    <!-- Khung dán nhanh cấu hình Firebase trực tiếp trên giao diện -->
+                    <div id="firebase-config-drawer" class="hidden w-full bg-zinc-950/95 border border-amber-400/50 rounded-2xl p-4 text-left">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-black text-amber-300 uppercase">Dán đoạn mã firebaseConfig từ Firebase Console</span>
+                            <button type="button" onclick="toggleFirebaseConfigDrawer()" class="text-xs text-zinc-400 hover:text-white font-bold">✕</button>
+                        </div>
+                        <p class="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                            Bạn có thể sửa trực tiếp biến <code class="text-pink-400">window.CUSTOM_FIREBASE_CONFIG</code> ở dòng 13 trong file HTML, hoặc dán nguyên đoạn object cấu hình vào ô dưới đây để kết nối ngay:
+                        </p>
+                        <textarea id="firebase-config-textarea" rows="6"
+                                  placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "your-app.firebaseapp.com",
+  "projectId": "your-app",
+  "storageBucket": "your-app.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abcdef"
+}'
+                                  class="w-full p-3 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-amber-400 text-xs font-mono text-teal-300 focus:outline-none"></textarea>
+                        <div class="flex items-center justify-end gap-2 mt-2.5">
+                            <button type="button" onclick="applyPastedFirebaseConfig()"
+                                    class="btn-sq-teal px-4 py-2 rounded-xl text-xs font-black text-white">
+                                ✓ Kết Nối Database Ngay
+                            </button>
+                        </div>
                     </div>
 
                     <!-- 1. Ô nhập TÊN NGƯỜI CHƠI -->
@@ -628,8 +673,10 @@
         import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'squid-game-arena';
-        let firebaseConfig = window.CUSTOM_FIREBASE_CONFIG;
-        if (!firebaseConfig && typeof __firebase_config !== 'undefined') {
+        let firebaseConfig = null;
+        if (window.CUSTOM_FIREBASE_CONFIG && window.CUSTOM_FIREBASE_CONFIG.apiKey && window.CUSTOM_FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+            firebaseConfig = window.CUSTOM_FIREBASE_CONFIG;
+        } else if (typeof __firebase_config !== 'undefined') {
             try { firebaseConfig = JSON.parse(__firebase_config); } catch (e) {}
         }
 
@@ -638,23 +685,27 @@
         let isOnlineReady = false;
         let currentRoomUnsub = null;
 
-        async function initFirebaseService() {
+        async function initFirebaseService(customOverride = null) {
+            if (customOverride) {
+                firebaseConfig = customOverride;
+            }
             const statusEl = document.getElementById("friends-fb-status");
             const lbLabel = document.getElementById("lb-source-label");
 
-            if (!firebaseConfig || !firebaseConfig.apiKey) {
+            if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
                 isOnlineReady = false;
-                if (statusEl) statusEl.textContent = "Chế độ Phòng Nội Bộ (Sẵn sàng tạo phòng & thêm bạn cùng máy)";
+                if (statusEl) statusEl.innerHTML = `Chế độ Phòng Nội Bộ — <span class="text-amber-300">Chưa gắn mã Firebase</span>`;
                 if (lbLabel) lbLabel.textContent = "Nguồn dữ liệu: Lưu trữ phiên chơi";
-                return;
+                return false;
             }
 
             try {
-                const app = initializeApp(firebaseConfig);
+                const appName = "squid-custom-" + Date.now();
+                const app = initializeApp(firebaseConfig, appName);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                if (!customOverride && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
@@ -662,15 +713,50 @@
 
                 isOnlineReady = true;
                 if (statusEl) {
-                    statusEl.innerHTML = `<span class="text-teal-400 font-bold">● Đã kết nối máy chủ trực tuyến</span> — Bạn bè có thể nhập mã 4 ký tự từ thiết bị khác`;
+                    statusEl.innerHTML = `<span class="text-teal-400 font-bold">● Đã kết nối Database trực tuyến (${firebaseConfig.projectId || "Firebase"})</span> — Bạn bè có thể nhập mã 4 ký tự để vào phòng!`;
                 }
                 if (lbLabel) lbLabel.textContent = "Nguồn dữ liệu: Đám mây trực tuyến";
+                return true;
             } catch (err) {
                 console.error("Firebase init error:", err);
                 isOnlineReady = false;
-                if (statusEl) statusEl.textContent = "Chế độ Phòng Nội Bộ (Dự phòng Offline)";
+                if (statusEl) statusEl.innerHTML = `<span class="text-rose-400 font-bold">✕ Lỗi kết nối Firebase:</span> ${err.message}`;
+                return false;
             }
         }
+
+        window.toggleFirebaseConfigDrawer = function() {
+            const drawer = document.getElementById("firebase-config-drawer");
+            if (drawer) drawer.classList.toggle("hidden");
+        };
+
+        window.applyPastedFirebaseConfig = async function() {
+            const raw = (document.getElementById("firebase-config-textarea").value || "").trim();
+            if (!raw) {
+                showToast("Vui lòng dán đoạn mã cấu hình firebaseConfig!", "info");
+                return;
+            }
+            try {
+                // Hỗ trợ cả định dạng JSON chuẩn lẫn đoạn object JS copy từ Firebase Console
+                const startIdx = raw.indexOf("{");
+                const endIdx = raw.lastIndexOf("}");
+                if (startIdx === -1 || endIdx === -1) throw new Error("Không tìm thấy cặp dấu ngoặc { }");
+                const objStr = raw.slice(startIdx, endIdx + 1);
+                const parsed = new Function("return (" + objStr + ")")();
+                if (!parsed || !parsed.apiKey || !parsed.projectId) {
+                    throw new Error("Thiếu apiKey hoặc projectId");
+                }
+                const ok = await initFirebaseService(parsed);
+                if (ok) {
+                    document.getElementById("firebase-config-drawer").classList.add("hidden");
+                    showToast("Kết nối Firebase thành công! Bạn có thể Tạo Phòng cho bạn bè tham gia.", "success");
+                } else {
+                    showToast("Không thể kết nối Firebase, hãy kiểm tra lại Anonymous Auth trong Firebase Console!", "info");
+                }
+            } catch (e) {
+                showToast("Định dạng mã cấu hình chưa hợp lệ: " + e.message, "info");
+            }
+        };
 
         // Tạo phòng trên Firestore
         window.cloudCreateRoom = async function(roomCode, roomData) {
